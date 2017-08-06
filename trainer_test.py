@@ -53,7 +53,7 @@ class MyTrainer(Trainer):
         :param graph_data: the graph data returned in create_graph_fn
         """
         # example to restore a graph from a checkpoint and creating the global_step
-        ckpt = tf.train.get_checkpoint_state('log_dir')
+        ckpt = tf.train.get_checkpoint_state(self.log_dir)
         if ckpt:
             graph_data['saver'].restore(session, ckpt.model_checkpoint_path)
 
