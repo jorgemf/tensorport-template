@@ -3,11 +3,10 @@
 This is a template to train models of [TensorFlow](https://www.tensorflow.org/) in [TensorPort](https://tensorport.com/).
 
 
-## Adding it as submodule
+## Adding this repository as submodule
 
 ```sh
 git submodule add -b master https://github.com/jorgemf/tensorport-template tensorport_template/
-git submodule init
 ```
 
 ## Basic setup of TensorPort
