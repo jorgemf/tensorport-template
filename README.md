@@ -32,7 +32,7 @@ tport create project
 cd $DATA_DIR
 git init
 git add *
-git-ltf track *
+git-lfs track *
 git commit -m "update data"
 tport create dataset
 cd $PROJECT_DIR
