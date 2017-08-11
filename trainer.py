@@ -3,6 +3,7 @@ import os
 import json
 import argparse
 import time
+
 from tensorport import get_data_path, get_logs_path
 import tensorflow as tf
 from tensorflow.python.training import session_run_hook
@@ -80,14 +81,15 @@ class DatasetSpec(object):
         self.path = path
 
 
-class Trainer(object):
+class Trainer(session_run_hook.SessionRunHook):
     """
-    Default class for training
+    Default class for training. This class extends from SessionRunHook and it is added to the hooks
+    in the MonitoredTrainingSession
     """
 
     def __init__(self, dataset_spec, log_dir, max_time=-1,
                  save_checkpoint_secs=600, save_summaries_steps=100, log_step_count_steps=100,
-                 monitored_training_session_config=None, hooks=[], chief_only_hooks=[]):
+                 monitored_training_session_config=None):
         """
         :param DatasetSpec dataset_spec: dataset specification
         :param str log_dir: directory where logs are stored
@@ -97,8 +99,6 @@ class Trainer(object):
         :param int log_step_count_steps: steps to log the steps_count
         :param tf.ConfigProto monitored_training_session_config: an instance of tf.ConfigProto,
         the configuration for the monitored training session
-        :param List[SessionRunHook] hooks: Optional list of `SessionRunHook` objects.
-        :param List[SessionRunHook] chief_only_hooks: list of `SessionRunHook` objects.
         Activate these hooks if is_chief==True`, ignore otherwise.
         """
         self.data_dir = get_data_path(
@@ -112,21 +112,13 @@ class Trainer(object):
         self.save_summaries_steps = save_summaries_steps
         self.log_step_count_steps = log_step_count_steps
         self.monitored_training_session_config = monitored_training_session_config
-        self.hooks = hooks
-        if max_time > 0:
-            self.hooks.append(StopAtTimeHook(max_time))
-        self.chief_only_hooks = chief_only_hooks
+        self.max_time = max_time
         logging.info('Log dir: {}', self.log_dir)
         logging.info('Data dir: {}', self.data_dir)
 
-    def train(self, create_graph_fn, train_step_fn, pre_train_fn=None, post_train_fn=None):
+    def train(self):
         """
-        :param create_graph_fn: function to create the graph,
-        see sample_create_graph_fn in train_test.py
-        :param train_step_fn: function to run the session,
-        see sample_train_step_fn in train_test.py
-        :param pre_train_fn: function to run just before the training starts (optional)
-        :param post_train_fn: function to run just after the training stops (optional)
+        Starts the training
         """
         task_spec = get_task_spec()
         if task_spec.cluster_spec:
@@ -146,7 +138,14 @@ class Trainer(object):
         logging.info('Creating graph...')
         with tf.Graph().as_default():
             with tf.device(device):
-                graph_data = create_graph_fn()
+                graph_data = self.create_graph()
+
+            hooks, chief_only_hooks = self.create_hooks(graph_data)
+            if hooks is None:
+                hooks = []
+            hooks.append(self)
+            if self.max_time > 0:
+                hooks.append(StopAtTimeHook(self.max_time))
 
             logging.info('Creating MonitoredTrainingSession...')
             with tf.train.MonitoredTrainingSession(
@@ -157,21 +156,38 @@ class Trainer(object):
                     save_summaries_steps=self.save_summaries_steps,
                     log_step_count_steps=self.log_step_count_steps,
                     config=self.monitored_training_session_config,
-                    hooks=self.hooks,
-                    chief_only_hooks=self.chief_only_hooks) as sess:
-
-                if pre_train_fn:
-                    logging.info('Pre training operations...')
-                    pre_train_fn(sess, graph_data)
+                    hooks=hooks,
+                    chief_only_hooks=chief_only_hooks) as sess:
 
                 logging.info('Starting training...')
 
                 while not sess.should_stop():
-                    train_step_fn(sess, graph_data)
+                    self.train_step(sess, graph_data)
 
-                if post_train_fn:
-                    logging.info('Post training operations...')
-                    post_train_fn(sess, graph_data)
+    def create_graph(self):
+        """
+        Function to create the graph
+        :return: Information related with the graph. It will be passed to other functions
+        """
+        raise NotImplementedError('Should have implemented this')
+
+    def create_hooks(self, graph_data):
+        """
+        Creates the hooks for the session. This function is called after the graph is created and
+        before the session is created.
+        :param graph_data: the graph data returned create_graph
+        :return: A tuple with two lists of hooks or none. First list if the hooks for all nodes and
+        the second list are the hooks only for the master node.
+        """
+        return [], []
+
+    def train_step(self, session, graph_data):
+        """
+        Function to run one time step.
+        :param session: the session
+        :param graph_data: the graph data returned in create_graph
+        """
+        raise NotImplementedError('Should have implemented this')
 
 
 class StopAtTimeHook(session_run_hook.SessionRunHook):

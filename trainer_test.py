@@ -5,10 +5,9 @@ from tensorflow.python.training import training_util
 class MyTrainer(Trainer):
     def __init__(self):
         dataset_spec = DatasetSpec('test', '', 'local_repo')
-        super(MyTrainer, self).__init__(dataset_spec, '/tmp/logdir', max_time=10,
-                                        hooks=[tf.train.StopAtStepHook(last_step=10)])
+        super(MyTrainer, self).__init__(dataset_spec, '/tmp/logdir', max_time=10)
 
-    def sample_create_graph_fn(self):
+    def create_graph(self):
         """
         Example of function to create a graph
         :return: Information related with the graph. It will be passed to other functions
@@ -26,17 +25,14 @@ class MyTrainer(Trainer):
         saver = tf.train.Saver()
         tf.summary.scalar('result', result)
 
-        # add a hook to stop the training in nan value of result (useful for the loss)
-        self.hooks.append(tf.train.NanTensorHook(result))
-
         return {'x': var_x, 'y': var_y, 'result': result, 'saver': saver,
                 'step_counter': global_step}
 
-    def sample_train_step_fn(self, session, graph_data):
+    def train_step(self, session, graph_data):
         """
         Example of function to run a train step
         :param tf.train.MonitoredSession session: session to run the graph
-        :param graph_data: the graph data returned in create_graph_fn
+        :param graph_data: the graph data returned in create_graph
         """
         result, step_counter = session.run([graph_data['result'], graph_data['step_counter']],
                                            feed_dict={
@@ -45,24 +41,23 @@ class MyTrainer(Trainer):
                                            })
         print('{} : {}'.format(step_counter, result))
 
-    def sample_pre_train_fn(self, session, graph_data):
+    def create_hooks(self, graph_data):
         """
-        This function is called just before the firs time train_step_fn is called.
-        :param tf.train.MonitoredSession session: session to run the graph
-        :param graph_data: the graph data returned in create_graph_fn
+        Example of function to create hooks.
+        :param graph_data: the graph data returned in create_graph
+        :return: A tuple with two lists of hooks or none. First list if the hooks for all nodes and
+        the second list are the hooks only for the master node.
         """
-        pass
 
-    def sample_post_train_fn(self, session, graph_data):
-        """
-        This function is called just after the train finished.
-        :param tf.train.MonitoredSession session: session to run the graph
-        :param graph_data: the graph data returned in create_graph_fn
-        """
-        pass
+        hooks = [
+            # stops the training after 10 stetps
+            tf.train.StopAtStepHook(last_step=10),
+            # stops the raining when the result is nan
+            tf.train.NanTensorHook(graph_data['result']),
+        ]
+        return hooks, None
 
 
 if __name__ == '__main__':
     trainer = MyTrainer()
-    trainer.train(create_graph_fn=trainer.sample_create_graph_fn,
-                  train_step_fn=trainer.sample_train_step_fn)
+    trainer.train()
