@@ -125,10 +125,8 @@ class Trainer(object):
         see sample_create_graph_fn in train_test.py
         :param train_step_fn: function to run the session,
         see sample_train_step_fn in train_test.py
-        :param pre_train_fn: function to run just before the training starts (optional),
-        see sample_pre_train_fn in train_test.py
-        :param post_train_fn: function to run just after the training stops (optional),
-        see sample_post_train_fn in train_test.py
+        :param pre_train_fn: function to run just before the training starts (optional)
+        :param post_train_fn: function to run just after the training stops (optional)
         """
         task_spec = get_task_spec()
         if task_spec.cluster_spec:

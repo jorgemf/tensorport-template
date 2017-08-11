@@ -48,14 +48,10 @@ class MyTrainer(Trainer):
     def sample_pre_train_fn(self, session, graph_data):
         """
         This function is called just before the firs time train_step_fn is called.
-        It is useful, for example, to load models from checkpoints.
         :param tf.train.MonitoredSession session: session to run the graph
         :param graph_data: the graph data returned in create_graph_fn
         """
-        # example to restore a graph from a checkpoint and creating the global_step
-        ckpt = tf.train.get_checkpoint_state(self.log_dir)
-        if ckpt:
-            graph_data['saver'].restore(session, ckpt.model_checkpoint_path)
+        pass
 
     def sample_post_train_fn(self, session, graph_data):
         """
