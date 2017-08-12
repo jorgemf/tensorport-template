@@ -4,8 +4,7 @@ from tensorflow.python.training import training_util
 
 class MyTrainer(Trainer):
     def __init__(self):
-        dataset_spec = DatasetSpec('test', '', 'local_repo')
-        super(MyTrainer, self).__init__(dataset_spec, '/tmp/logdir', max_time=10)
+        super(MyTrainer, self).__init__('/tmp/logdir', max_time=10)
 
     def create_graph(self):
         """
