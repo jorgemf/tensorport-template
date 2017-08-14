@@ -76,7 +76,9 @@ class DatasetFilelines(Dataset):
         """
         Given a example serialized this function returns a list of tensors with the example
         deserialized.
-        A Python function, which accepts a list of NumPy ndarray objects having element types that match the corresponding tf.Tensor objects in inp, and returns a list of ndarray objects (or a single ndarray) having element types that match the corresponding values in Tout.
+        A Python function, which accepts a list of NumPy ndarray objects having element types that
+        match the corresponding tf.Tensor objects in inp, and returns a list of ndarray objects
+        (or a single ndarray) having element types that match the corresponding values in Tout.
         :param example_serialized:
         :return List[tf.Tensor]: List of tensors with the
         """
