@@ -33,7 +33,7 @@ class DatasetTFrecords(Dataset):
         with g.as_default():
             queue = tf.train.string_input_producer(self.data_files(), num_epochs=1, shuffle=False)
             _, example_serialized = self.get_reader().read(queue)
-            _, _ = self.decode_tfrecord(example_serialized, only_counting=True)
+            inputs, outputs = self.decode_tfrecord(example_serialized, only_counting=True)
 
             sess = tf.Session(graph=g)
             with sess.as_default():
@@ -43,7 +43,7 @@ class DatasetTFrecords(Dataset):
                 threads = tf.train.start_queue_runners(coord=coord)
                 try:
                     while True:
-                        sess.run([id])
+                        sess.run([inputs, outputs])
                         size += 1
                 except tf.errors.OutOfRangeError:
                     pass
