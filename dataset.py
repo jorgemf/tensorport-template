@@ -95,7 +95,11 @@ class Dataset(object):
             inputs_outputs.append(data)
 
         capacity = 2 * self.num_preprocess_threads * batch_size
-        result = tf.train.batch_join(inputs_outputs, batch_size=batch_size, capacity=capacity)
+        if shuffle:
+            result = tf.train.shuffle_batch_join(inputs_outputs, batch_size=batch_size,
+                                                 capacity=capacity)
+        else:
+            result = tf.train.batch_join(inputs_outputs, batch_size=batch_size, capacity=capacity)
         if input_list_size == 0:
             inputs = None
             outputs = result
