@@ -97,7 +97,7 @@ class Dataset(object):
         capacity = 2 * self.num_preprocess_threads * batch_size
         if shuffle:
             result = tf.train.shuffle_batch_join(inputs_outputs, batch_size=batch_size,
-                                                 capacity=capacity)
+                                                 min_after_dequeue=capacity / 2, capacity=capacity)
         else:
             result = tf.train.batch_join(inputs_outputs, batch_size=batch_size, capacity=capacity)
         if input_list_size == 0:
