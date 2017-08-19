@@ -78,7 +78,8 @@ class DatasetFilelines(Dataset):
         match the corresponding tf.Tensor objects in inp, and returns a list of ndarray objects
         (or a single ndarray) having element types that match the corresponding values in Tout.
         :param example_serialized:
-        :return List[tf.Tensor]: List of tensors with the
+        :return List[tf.Tensor]: List of tensors with the inputs and outputs of the example. For example: [ input, output] or for several inputs/outputs
+        [ input_1, input_2,..., output_1, output_2, ... ]
         """
         raise NotImplementedError('Should have implemented this')
 

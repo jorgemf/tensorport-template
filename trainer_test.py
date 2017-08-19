@@ -58,5 +58,6 @@ class MyTrainer(Trainer):
 
 
 if __name__ == '__main__':
-    trainer = MyTrainer()
-    trainer.train()
+    if not get_task_spec().join_if_ps():
+        trainer = MyTrainer()
+        trainer.train()

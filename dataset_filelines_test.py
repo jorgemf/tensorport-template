@@ -1,5 +1,5 @@
 from dataset_filelines import DatasetFilelines
-from trainer import Trainer
+from trainer import Trainer, get_task_spec
 import tensorflow as tf
 from tensorflow.python.training import training_util
 import numpy as np
@@ -11,10 +11,15 @@ class MyDatasetFilelines(DatasetFilelines):
                                                           'dataset_filelines_test_2.txt'], 10)
 
     def py_func_parse_example(self, example_serialized):
+        # perform any logic here with the example_serialized, this is python code. Use
+        # py_fun_parse_example_reshape if you want to do transformation with TensorFlow
         return [
             np.asarray(int(example_serialized), dtype=np.int32),
             np.asarray(-int(example_serialized), dtype=np.int32)
         ]
+        # if you want to return serveral inputs or outputs:
+        # return [ input_1, input_2, ..., output_1, output_2, ... ]
+        # also set up py_func_parse_example_inputs_outputs() according to it
 
     def py_func_parse_example_types(self):
         return [tf.int32, tf.int32]
@@ -23,6 +28,8 @@ class MyDatasetFilelines(DatasetFilelines):
         return 1, 1
 
     def py_fun_parse_example_reshape(self, inputs, outputs):
+        # reshape the inputs and outputs to the real shapes (no batching here), you can
+        # also perform any transformation with TensorFlow of the inputs/outputs
         inputs[0] = tf.reshape(inputs[0], [1])
         outputs[0] = tf.reshape(outputs[0], [1])
         return inputs, outputs
@@ -50,6 +57,7 @@ class MyTrainer(Trainer):
 
 
 if __name__ == '__main__':
-    dataset = MyDatasetFilelines()
-    print('{} records in the dataset'.format(dataset.get_size()))
-    MyTrainer(dataset).train()
+    if not get_task_spec().join_if_ps():
+        dataset = MyDatasetFilelines()
+        print('{} records in the dataset'.format(dataset.get_size()))
+        MyTrainer(dataset).train()
