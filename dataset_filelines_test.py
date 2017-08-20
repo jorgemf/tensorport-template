@@ -57,7 +57,6 @@ class MyTrainer(Trainer):
 
 
 if __name__ == '__main__':
-    if not get_task_spec().join_if_ps():
-        dataset = MyDatasetFilelines()
-        print('{} records in the dataset'.format(dataset.get_size()))
-        MyTrainer(dataset).train()
+    dataset = MyDatasetFilelines()
+    print('{} records in the dataset'.format(dataset.get_size()))
+    MyTrainer(dataset).train()
