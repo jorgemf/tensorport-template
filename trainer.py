@@ -24,8 +24,10 @@ class TaskSpec(object):
             ps = ps_hosts if isinstance(ps_hosts, list) else ps_hosts.split(',')
             worker = worker_hosts if isinstance(worker_hosts, list) else worker_hosts.split(',')
             self.cluster_spec = tf.train.ClusterSpec({'ps': ps, 'worker': worker, })
+            self.num_workers = len(worker)
         else:
             self.cluster_spec = None
+            self.num_workers = 1
 
     def is_chief(self):
         return self.index == 0
@@ -34,7 +36,7 @@ class TaskSpec(object):
         return self.job_name == 'ps'
 
     def is_worker(self):
-        return self.job_name == 'worker'
+        return self.job_name == 'worker' or self.job_name == 'master'
 
     def join_if_ps(self):
         if self.is_ps():
@@ -146,6 +148,7 @@ class Trainer(session_run_hook.SessionRunHook):
         self.max_time = max_time
         self.num_steps = num_steps
         self.max_steps = max_steps
+        self.is_chief = None
         logging.info('Log dir: {}', self.log_dir)
 
     def train(self):
