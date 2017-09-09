@@ -1,5 +1,6 @@
-from trainer import *
+import tensorflow as tf
 from tensorflow.python.training import training_util
+from trainer import Trainer
 
 
 class MyTrainer(Trainer):
@@ -27,7 +28,7 @@ class MyTrainer(Trainer):
         return {'x': var_x, 'y': var_y, 'result': result, 'saver': saver,
                 'step_counter': global_step}
 
-    def train_step(self, session, graph_data):
+    def step(self, session, graph_data):
         """
         Example of function to run a train step
         :param tf.train.MonitoredSession session: session to run the graph
@@ -59,4 +60,4 @@ class MyTrainer(Trainer):
 
 if __name__ == '__main__':
     trainer = MyTrainer()
-    trainer.train()
+    trainer.run()

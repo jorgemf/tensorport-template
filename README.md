@@ -6,8 +6,10 @@ This is a template to train models of [TensorFlow](https://www.tensorflow.org/) 
 ## Adding this repository as submodule
 
 ```sh
-git submodule add -b master https://github.com/jorgemf/tensorport-template tensorport_template/
+git submodule add -b master https://github.com/tensorport/tensorport-template tensorport_template/
 ```
+
+**NOTE**: Currently TensorPort doesn't support submodules from GitHub
 
 ## Basic setup of TensorPort
 
@@ -38,135 +40,104 @@ tport create dataset
 cd $PROJECT_DIR
 ```
 
-## Training a model
+## Examples
 
-Create your model and the functions to run a train step:
+You have several examples to create and train a model:
 
-```python
-from tensorport_template.trainer import Trainer, get_task_spec
-import tensorflow as tf
-
-class MyTrainer(Trainer):
-    def __init__(self):
-        # call the super constructor with at least the dataset_spec and the log dir
-        super(MyTrainer, self).__init__('/tmp/logdir', max_time=10,
-                                        hooks=[tf.train.StopAtStepHook(last_step=10)])
-
-    def create_graph(self):
-    	# create your graph here and return information about it if you want
-    	graph_data = {'input': input_tensor, 
-    	              'output': output_tensor,
-    	              'loss': loss_tensor,
-    	              'saver': tf.train.Saver()}
-    	return graph_data
-
-    def train_step(self, session, graph_data):
-        # run a train step
-    	result = session.run([graph_data['output']],
-    	                     feed_dict={ graph_data['input']: ... })
-
-    def create_hooks(self, graph_data):
-        hooks = [
-            # stops the raining when the result is nan
-            tf.train.NanTensorHook(graph_data['result']),
-        ]
-        return hooks, None
+| [trainer_test.py](https://github.com/tensorport/tensorport-template/blob/master/trainer_test.py) | basic example that feeds the data directly in `session.run()` |
+| [trainer_dataset_test.py](https://github.com/tensorport/tensorport-template/blob/master/trainer_dataset_test.py) | example that uses the `TFDataSet` class  load the data from txt files. `TFDataSet` is basically a wrapper of the TensorFlow class `Dataset` with support for distributed training |
 
 
-if __name__ == '__main__':
-    trainer = MyTrainer()
-    trainer.train()
-```
+### Distributed training with continuous evaluation
 
-Test it works in local:
+The recommended way to perform an evaluation at the same time the training is running is by using a new process that loads the checkpoints and runs the model with the evaluation dataset. This functionallity is under [distributed_training.py](https://github.com/tensorport/tensorport-template/blob/master/distributed_training.py). You can use calling to the function `launch_train_evaluation`. The last worker server will be use only for the evaluation. 
 
-```sh
-python mytrainer.py
-```
-
-Set the environment variables:
-
-```sh
-export PROJECT_DIR="~/myprojects/project/"
-export DATA_DIR="~/mydata/data/"
-```
-
-Run the `train.sh` script that update the repositories and runs a job in TensorPort:
-
-
-```sh
-./tensorport_template/train.sh
-```
-
-## Datasets
-
-Aditionally you can set up datasets extending the classes `DatasetFilelines` if you read the data from a text file or `DatasetTFrecords` if you read the data from TensorFlow records (protocol buffers with the data samples).
-
-Here is an example to read records from a text file:
+For example:
 
 ```python
-from dataset_filelines import DatasetFilelines
-from trainer import Trainer, get_task_spec
+from distributed_training import launch_train_evaluation
+from tf_dataset import TFDataSet
 import tensorflow as tf
+from tensorflow.contrib import layers
+from tensorflow.contrib import losses
 from tensorflow.python.training import training_util
 import numpy as np
 
-
-class MyDatasetFilelines(DatasetFilelines):
+# dummy dataset
+class MyDummyDataSet(TFDataSet):
     def __init__(self):
-        super(MyDatasetFilelines, self).__init__('test', ['dataset_filelines_test_1.txt',
-                                                          'dataset_filelines_test_2.txt'], 10)
+        super(MyDummyDataSet, self).__init__(name='my_dataset', 
+        									 data_files_pattern='dataset_filelines_test_*.txt',
+                                             min_queue_examples=2, 
+                                             shuffle_size=5)
 
-    def py_func_parse_example(self, example_serialized):
-        # perform any logic here with the example_serialized, this is python code. Use
-        # py_fun_parse_example_reshape if you want to do transformation with TensorFlow
-        return [
-            np.asarray(int(example_serialized), dtype=np.int32),
-            np.asarray(-int(example_serialized), dtype=np.int32)
-        ]
-        # if you want to return serveral inputs or outputs:
-        # return [ input_1, input_2, ..., output_1, output_2, ... ]
-        # also set up py_func_parse_example_inputs_outputs() according to it
+    def _map(self, example_serialized):
+        def _parse(line):
+            input = np.float32(line)
+            # a simple equation of the input to generate the output
+            output = input + 10 + input * 2
+            # generate 2 inputs and 1 output
+            return input, np.float32(input * 3), np.float32(output)
 
-    def py_func_parse_example_types(self):
-        return [tf.int32, tf.int32]
+        input_1, input_2, output = tf.py_func(func=_parse,
+                                              inp=[example_serialized],
+                                              Tout=[tf.float32, tf.float32, tf.float32],
+                                              stateful=True)
+        # set shapes for data
+        input_1 = tf.reshape(input_1, [1])
+        input_2 = tf.reshape(input_2, [1])
+        output = tf.reshape(output, [1])
+        # concat all the input into one tensor, we could also return 3 values in the 
+        # tuple and make the concat in the graph
+        input = tf.concat([input_1, input_2], axis=0)
+        return input, output
 
-    def py_func_parse_example_inputs_outputs(self):
-        return 1, 1
+# function that creates the model
+def model_fn_example(dataset_tensor, evaluation):
+    input, output = dataset_tensor
+    net_output = layers.fully_connected(input, 1, activation_fn=None)
+    batch_error = losses.mean_squared_error(output, net_output)
+    graph_data = {}
+    global_step = training_util.get_or_create_global_step()
 
-    def py_fun_parse_example_reshape(self, inputs, outputs):
-        # reshape the inputs and outputs to the real shapes (no batching here), you can
-        # also perform any transformation with TensorFlow of the inputs/outputs
-        inputs[0] = tf.reshape(inputs[0], [1])
-        outputs[0] = tf.reshape(outputs[0], [1])
-        return inputs, outputs
+    # use different metrics depending of evaluation
+    if evaluation:
+        # accumulate the error for the result
+        error_sum = tf.Variable(0.0, dtype=tf.float32, name='accumulated_error', trainable=False)
+        error_sum = tf.assign_add(error_sum, batch_error)
+        count = tf.Variable(0.0, dtype=tf.float32, name='data_samples', trainable=False)
+        count = tf.assign_add(count, 1)
+        error = error_sum / count
+    else:
+        # use moving averages for the error
+        ema = tf.train.ExponentialMovingAverage(decay=0.9)
+        update_op = ema.apply([batch_error])
+        error = ema.average(batch_error)
+        sgd = tf.train.GradientDescentOptimizer(0.00001)
+        train_op = sgd.minimize(batch_error, global_step)
+        # graph to execute in session.run for the training
+        graph_data['error'] = error
+        graph_data['update_op'] = update_op
+        graph_data['train_op'] = train_op
 
-
-class MyTrainer(Trainer):
-    def __init__(self, dataset):
-        self.dataset = dataset
-        self.batch_size = 2
-        num_steps = dataset.get_size() / self.batch_size
-        super(MyTrainer, self).__init__('/tmp/logdir', num_steps=num_steps)
-
-    def create_graph(self):
-        inputs, outputs = self.dataset.read(self.batch_size)
-        self.global_step = training_util.get_or_create_global_step()
-        global_step_increase = tf.assign_add(self.global_step, 1)
-        with tf.control_dependencies([global_step_increase]):
-            self.inputs = tf.identity(inputs)
-            self.outputs = tf.identity(outputs)
-
-    def train_step(self, session, graph_data):
-        step, value_inputs, value_outputs = session.run([self.global_step,
-                                                         self.inputs, self.outputs])
-        print('{}: {}, {}'.format(step, value_inputs.tolist(), value_outputs.tolist()))
-
+    # add error to summary, this will show in tensorboard for training and test.
+    # the summary operator will be executed in session.run during evaluation
+    tf.summary.scalar('mse_error', error)
+    return graph_data
 
 if __name__ == '__main__':
-	dataset = MyDatasetFilelines()
-	print('{} records in the dataset'.format(dataset.get_size()))
-	MyTrainer(dataset).train()
-
+	# use same dataset for training and testing, usually you will have 2 different dataset
+	dataset = MyDummyDataSet()
+	log_dir = '/tmp/logdir'  # /tmp/logdir/eval will contain the evaluation summary 
+	launch_train_evaluation(model_fn=model_fn_example, 
+							log_dir=log_dir, 
+							epochs=10, 
+							train_batch_size=16, 
+							train_datasest=dataset,
+                            test_dataset=dataset)
 ```
+
+## Running a job
+
+You can use the scrip `train.sh` to update the data in TensorPort and create a new job.
 
