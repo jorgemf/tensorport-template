@@ -44,8 +44,8 @@ cd $PROJECT_DIR
 
 You have several examples to create and train a model:
 
-| [trainer_test.py](https://github.com/tensorport/tensorport-template/blob/master/trainer_test.py) | basic example that feeds the data directly in `session.run()` |
-| [trainer_dataset_test.py](https://github.com/tensorport/tensorport-template/blob/master/trainer_dataset_test.py) | example that uses the `TFDataSet` class  load the data from txt files. `TFDataSet` is basically a wrapper of the TensorFlow class `Dataset` with support for distributed training |
+* [trainer_test.py](https://github.com/tensorport/tensorport-template/blob/master/trainer_test.py): basic example that feeds the data directly in `session.run()`
+* [trainer_dataset_test.py](https://github.com/tensorport/tensorport-template/blob/master/trainer_dataset_test.py): example that uses the `TFDataSet` class  load the data from txt files. `TFDataSet` is basically a wrapper of the TensorFlow class `Dataset` with support for distributed training
 
 
 ### Distributed training with continuous evaluation
