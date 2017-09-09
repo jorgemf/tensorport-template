@@ -67,7 +67,7 @@ import numpy as np
 class MyDummyDataSet(TFDataSet):
     def __init__(self):
         super(MyDummyDataSet, self).__init__(name='my_dataset', 
-        									 data_files_pattern='dataset_filelines_test_*.txt',
+                                             data_files_pattern='dataset_filelines_test_*.txt',
                                              min_queue_examples=2, 
                                              shuffle_size=5)
 
@@ -130,10 +130,10 @@ if __name__ == '__main__':
 	dataset = MyDummyDataSet()
 	log_dir = '/tmp/logdir'  # /tmp/logdir/eval will contain the evaluation summary 
 	launch_train_evaluation(model_fn=model_fn_example, 
-							log_dir=log_dir, 
-							epochs=10, 
-							train_batch_size=16, 
-							train_datasest=dataset,
+                            log_dir=log_dir, 
+                            epochs=10, 
+                            train_batch_size=16, 
+                            train_datasest=dataset,
                             test_dataset=dataset)
 ```
 
