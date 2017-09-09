@@ -11,7 +11,7 @@ class TaskSpec(object):
     the worker servers
     """
 
-    def __init__(self, job_name='mater', index=0, ps_hosts=None, worker_hosts=None):
+    def __init__(self, job_name='master', index=0, ps_hosts=None, worker_hosts=None):
         self.job_name = job_name
         self.index = index
 

@@ -13,7 +13,7 @@ class Trainer(session_run_hook.SessionRunHook):
     """
 
     def __init__(self, log_dir, max_time=None, num_steps=None, max_steps=None,
-                 save_checkpoint_secs = 600, save_summaries_steps = 100, log_step_count_steps = 100,
+                 save_checkpoint_secs=600, save_summaries_steps=100, log_step_count_steps=100,
                  monitored_training_session_config=None, task_spec=None):
         """
         :param str log_dir: directory where logs are stored
