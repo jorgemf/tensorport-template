@@ -1,5 +1,4 @@
 import multiprocessing
-import logging
 import tensorflow as tf
 from tensorflow.contrib.data import TextLineDataset
 from tensorflow.contrib.data import Dataset
@@ -78,16 +77,38 @@ class TFDataSet(object):
                 raise ValueError('shuffle_size has not been set')
             dataset = dataset.shuffle(buffer_size=self.shuffle_size)
 
-        # process each example
-        dataset = dataset.map(self._map,
-                              # use as many threads as CPUs + 1
-                              # TODO in TF 1.4 use: num_parallel_calls=multiprocessing.cpu_count() + 1,
-                              num_threads=multiprocessing.cpu_count() + 1,
-                              # buffer the data as CPUs * batch_size + minimum_size
-                              output_buffer_size=batch_size * multiprocessing.cpu_count() +
-                                                 self.min_queue_examples)
+        # process each example. We check the method is defined in the child class:
+        if self._flat_map.__func__ in self._flat_map.im_class.__dict__.values():
+            dataset = dataset.flat_map(self._flat_map)
+        if self._map.__func__ in self._map.im_class.__dict__.values():
+            dataset = dataset.map(self._map,
+                                  # use as many threads as CPUs + 1
+                                  # TODO in TF 1.4 use: num_parallel_calls=multiprocessing.cpu_count() + 1,
+                                  num_threads=multiprocessing.cpu_count() + 1,
+                                  # buffer the data as CPUs * batch_size + minimum_size
+                                  output_buffer_size=batch_size * multiprocessing.cpu_count() +
+                                                     self.min_queue_examples)
         dataset = dataset.batch(batch_size)
         return dataset.make_one_shot_iterator().get_next()
+
+    def _flat_map(self, example_serialized):
+        """
+        Flat maps the example serialized.
+        Simple example:
+
+        def _parse(line):
+            a, b = [np.int32(x) for x in line.split()]
+            return [a, a*2, a*3], [b, b*2, b*3]
+
+        t_input, t_ouptut = tf.py_func(_parse, [line], [tf.int32, tf.int32],
+                                       stateful=True, name='py_parse_example')
+        v = (t_intput, t_output)
+        return Dataset.from_tensor_slices(v)
+
+        :param example_serialized:
+        :return: a dataset
+        """
+        pass
 
     def _map(self, example_serialized):
         """
@@ -109,7 +130,7 @@ class TFDataSet(object):
         :param example_serialized: the example serialized
         :return: a tuple of the tensors to return when get_next is called. Usually (inputs,outputs)
         """
-        raise NotImplementedError('Should have implemented this')
+        pass
 
     def _count_num_records(self):
         """
