@@ -9,7 +9,7 @@ class TFDataSet(object):
     """Abstract class that helps to work with TensorFlow Datasets"""
 
     def __init__(self, name, data_files_pattern, dataset_class=TextLineDataset,
-                 min_queue_examples=0, shuffle_size=None):
+                 min_queue_examples=0, shuffle_size=None, padded_shapes=None, padded_values=None):
         """
         :param name: name of the dataset.
         :param str data_files_pattern: pattern of the data files
@@ -19,12 +19,16 @@ class TFDataSet(object):
         proportional to the ram of the computer. By default is 0
         :param int shuffle_size: size of the buffer for shuffling, this value should be
         proportional to the ram of the computer
+        :param List[tf.Tensor] padded_shapes: shape for padding the batch
+        :param tf.Tensor padded_values: values for the padding
         """
         self.name = name
         self.data_files_pattern = data_files_pattern
         self.dataset_class = dataset_class
         self.min_queue_examples = min_queue_examples
         self.shuffle_size = shuffle_size
+        self.padded_shapes = padded_shapes
+        self.padded_values = padded_values
 
     def read(self, batch_size, num_epochs=1, shuffle=False, task_spec=None):
         """
@@ -37,16 +41,29 @@ class TFDataSet(object):
         :return: The result of calling dataset.make_one_shot_iterator().get_next()
         """
         # create the dataset of files with the data
-        dataset = Dataset.list_files(self.data_files_pattern)
+        # TODO in TF 1.3 use:  dataset = Dataset.list_files(self.data_files_pattern)
+        from tensorflow.python.ops import gen_io_ops
+        dataset = Dataset.from_tensor_slices(gen_io_ops.matching_files(self.data_files_pattern))
         # set the number of epochs
         dataset = dataset.repeat(num_epochs)
         if shuffle:
             # read one sample per file
-            dataset = dataset.interleave(self.dataset_class,
-                                         # number of readers the same as number of CPUs
-                                         cycle_length=multiprocessing.cpu_count() + 1,
-                                         # block size is 1 to get directly a flat map
-                                         block_length=1)
+            # TODO in TF 1.3 use:
+            # dataset = dataset.interleave(self.dataset_class,
+            #                              # number of readers the same as number of CPUs
+            #                              cycle_length=multiprocessing.cpu_count() + 1,
+            #                              # block size is 1 to get directly a flat map
+            #                              block_length=1)
+            files = []
+            filename = dataset.make_one_shot_iterator().get_next()
+            try:
+                with tf.Session() as sess:
+                    while True:
+                        d = sess.run(filename)
+                        files.append(d)
+            except OutOfRangeError:
+                pass
+            dataset = self.dataset_class(files)
         else:
             # reads files sequentially
             files = []
@@ -78,9 +95,9 @@ class TFDataSet(object):
             dataset = dataset.shuffle(buffer_size=self.shuffle_size)
 
         # process each example. We check the method is defined in the child class:
-        if self._flat_map.__func__ in self._flat_map.im_class.__dict__.values():
+        if self._flat_map.__func__ not in TFDataSet.__dict__.values():
             dataset = dataset.flat_map(self._flat_map)
-        if self._map.__func__ in self._map.im_class.__dict__.values():
+        if self._map.__func__ not in TFDataSet.__dict__.values():
             dataset = dataset.map(self._map,
                                   # use as many threads as CPUs + 1
                                   # TODO in TF 1.4 use: num_parallel_calls=multiprocessing.cpu_count() + 1,
@@ -88,10 +105,14 @@ class TFDataSet(object):
                                   # buffer the data as CPUs * batch_size + minimum_size
                                   output_buffer_size=batch_size * multiprocessing.cpu_count() +
                                                      self.min_queue_examples)
-        dataset = dataset.batch(batch_size)
+        if self.padded_shapes:
+            dataset = dataset.padded_batch(batch_size, self.padded_shapes, self.padded_values)
+        else:
+            dataset = dataset.batch(batch_size)
         return dataset.make_one_shot_iterator().get_next()
 
-    def _flat_map(self, example_serialized):
+    # TODO remove features in TF 1.3
+    def _flat_map(self, example_serialized, features=None):
         """
         Flat maps the example serialized.
         Simple example:
@@ -106,18 +127,20 @@ class TFDataSet(object):
         return Dataset.from_tensor_slices(v)
 
         :param example_serialized:
+        :param features: do not use this as it is deprecated after 1.2
         :return: a dataset
         """
         pass
 
-    def _map(self, example_serialized):
+    # TODO remove features in TF 1.3
+    def _map(self, example_serialized, features=None):
         """
         Maps a example_serialized read from the dataset into the final set of tf.Tensors
         to return to the model.
 
         Simple example:
 
-        def _parse(line):
+        def _parse(line, features=None):
             a, b = [np.int32(x) for x in line.split()]
             return a, b
 
@@ -128,6 +151,7 @@ class TFDataSet(object):
         return t_input, t_ouptut
 
         :param example_serialized: the example serialized
+        :param features: do not use this as it is deprecated after 1.2
         :return: a tuple of the tensors to return when get_next is called. Usually (inputs,outputs)
         """
         pass
@@ -139,7 +163,11 @@ class TFDataSet(object):
         :return int: the number of non-empty lines in the data_files
         """
         size = 0
-        dataset = Dataset.list_files(self.data_files_pattern).repeat(1)
+        # TODO in TF 1.3 use: dataset = Dataset.list_files(self.data_files_pattern).repeat(1)
+        from tensorflow.python.ops import gen_io_ops
+        dataset = Dataset.from_tensor_slices(
+            gen_io_ops.matching_files(self.data_files_pattern)).repeat(1)
+
         dataset = self.dataset_class(dataset).repeat(1)
         samples = 0
         try:

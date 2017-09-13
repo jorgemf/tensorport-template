@@ -1,13 +1,12 @@
 import multiprocessing
 import tensorflow as tf
 from tensorflow.contrib.data import Dataset
-from tensorflow.python.framework.errors_impl import OutOfRangeError
 
 # from TensorFlow 1.4
 import collections
 import threading
 from tensorflow.python.ops import script_ops
-from tensorflow.contrib.data.python.util import nest
+from tensorflow.python.util import nest
 from tensorflow.python.framework import tensor_shape
 
 
@@ -35,23 +34,30 @@ class _GeneratorState(object):
 class TFDataSetGenerator(object):
     """Abstract class that helps to work with TensorFlow Datasets"""
 
-    def __init__(self, name, generator, output_types, min_queue_examples=0, shuffle_size=None):
+    def __init__(self, name, generator, output_types, output_shapes=None, min_queue_examples=0,
+                 shuffle_size=None, padded_shapes=None, padded_values=None):
         """
         :param name: name of the dataset.
         :param generator generator: generator of elements in of the dataset
         :param output_types: list of output types of the generator
+        :param output_shapes: output shapes of the generator
         :param int min_queue_examples: minimum number of examples to queue, this value should be
         proportional to the ram of the computer. By default is 0
         :param int shuffle_size: size of the buffer for shuffling, this value should be
         proportional to the ram of the computer
+        :param List[tf.Tensor] padded_shapes: shape for padding the batch
+        :param tf.Tensor padded_values: values for the padding
         """
         if not callable(generator):
             raise TypeError("`generator` must be callable.")
         self.name = name
         self.generator = generator
         self.output_types = output_types
+        self.output_shapes = output_shapes
         self.min_queue_examples = min_queue_examples
         self.shuffle_size = shuffle_size
+        self.padded_shapes = padded_shapes
+        self.padded_values = padded_values
 
     def read(self, batch_size, num_epochs=1, shuffle=False, task_spec=None):
         """
@@ -64,8 +70,14 @@ class TFDataSetGenerator(object):
         :return: The result of calling dataset.make_one_shot_iterator().get_next()
         """
         # TODO in TF 1.4 use: dataset = Dataset.from_generator(self.generator)
+        # FIXME repeat doesn't work with generators, so we can encapsulate the generator here
+        def _epochs():
+            for _ in range(num_epochs):
+                for item in self.generator():
+                    yield item
+        generator_state = _GeneratorState(_epochs)
         output_types = self.output_types
-        generator_state = _GeneratorState(self.generator)
+        output_shapes = self.output_shapes
         output_shapes = nest.map_structure(
             lambda _: tensor_shape.TensorShape(None), output_types)
         flattened_types = nest.flatten(output_types)
@@ -114,7 +126,8 @@ class TFDataSetGenerator(object):
         ############################################################################################
 
         # set the number of epochs
-        dataset = dataset.repeat(num_epochs)
+        # FIXME repeat doesn't work with generators
+        # dataset = dataset.repeat(num_epochs)
 
         if task_spec and task_spec.num_workers > 1:
             # split the dataset in shards
@@ -134,7 +147,7 @@ class TFDataSetGenerator(object):
             dataset = dataset.shuffle(buffer_size=self.shuffle_size)
 
         # process each example. We check the method is defined in the child class:
-        if self._map.__func__ in self._map.im_class.__dict__.values():
+        if self._map.__func__ not in TFDataSetGenerator.__dict__.values():
             dataset = dataset.map(self._map,
                                   # use as many threads as CPUs + 1
                                   # TODO in TF 1.4 use: num_parallel_calls=multiprocessing.cpu_count() + 1,
@@ -142,8 +155,15 @@ class TFDataSetGenerator(object):
                                   # buffer the data as CPUs * batch_size + minimum_size
                                   output_buffer_size=batch_size * multiprocessing.cpu_count() +
                                                      self.min_queue_examples)
-        dataset = dataset.batch(batch_size)
+        if self.padded_shapes:
+            dataset = dataset.padded_batch(batch_size, self.padded_shapes, self.padded_values)
+        else:
+            dataset = dataset.batch(batch_size)
         return dataset.make_one_shot_iterator().get_next()
 
-    def _map(self, example):
-        return example
+    # TODO remove features in TF 1.3
+    def _map(self, example, features=None):
+        """
+        See TFDataSet._map()
+        """
+        pass
