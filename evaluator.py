@@ -78,7 +78,8 @@ class Evaluator(session_run_hook.SessionRunHook):
     def end(self, session):
         # save summaries
         step = int(self.lastest_checkpoint.split('-')[-1])
-        self.summary_writer.add_summary(self.summary, step)
+        if self.summary:
+            self.summary_writer.add_summary(self.summary, step)
 
     def create_graph(self, dataset_tensor, batch_size):
         """
