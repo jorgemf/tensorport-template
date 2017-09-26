@@ -33,7 +33,7 @@ class MyDummyDataSet(TFDataSet):
         return input, output
 
 
-def model_fn_example(dataset_tensor, evaluation):
+def model_fn_example(dataset_tensor, evaluation, batch_size):
     input, output = dataset_tensor
     net_output = layers.fully_connected(input, 1, activation_fn=None)
     batch_error = losses.mean_squared_error(output, net_output)
@@ -71,13 +71,11 @@ if __name__ == '__main__':
     trainer = DistributedTrainer(log_dir=logdir,
                                  dataset=MyDummyDataSet(),
                                  model_fn=model_fn_example,
-                                 batch_size=8,
-                                 epochs=20,
                                  task_spec=get_task_spec(),
                                  save_checkpoint_secs=10,
                                  save_summaries_steps=10,
                                  log_step_count_steps=10)
-    trainer.run()
+    trainer.run(epochs=20, batch_size=8)
     evaluator = DistributedEvaluator(log_dir=logdir,
                                      # using same dataset as training here, only for testing
                                      dataset=MyDummyDataSet(),

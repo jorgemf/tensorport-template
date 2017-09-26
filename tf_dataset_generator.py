@@ -167,3 +167,25 @@ class TFDataSetGenerator(object):
         See TFDataSet._map()
         """
         pass
+
+    def _count_num_records(self):
+        """
+        Counts the number of non-empty lines (the data samples) from the data_files. This function
+        is called from get_size the first time.
+        :return int: the number of non-empty lines in the data_files
+        """
+        samples = 0
+        try:
+            next_element = self.read(batch_size=1, num_epochs=1, shuffle=False, task_spec=None)
+            with tf.Session() as sess:
+                while True:
+                    sess.run(next_element)
+                    samples += 1
+        except:
+            pass
+        return samples
+
+    def get_size(self):
+        if self._size is None:
+            self._size = self._count_num_records()
+        return self._size

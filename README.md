@@ -40,12 +40,51 @@ tport create dataset
 cd $PROJECT_DIR
 ```
 
-## Examples
+## Example
 
-You have several examples to create and train a model:
+```python
+import numpy as np
+import tensorflow as tf
+from tensorflow.python.training import training_util
+from trainer import Trainer
+from tf_dataset import TFDataSet
 
-* [trainer_test.py](https://github.com/tensorport/tensorport-template/blob/master/trainer_test.py): basic example that feeds the data directly in `session.run()`
-* [trainer_dataset_test.py](https://github.com/tensorport/tensorport-template/blob/master/trainer_dataset_test.py): example that uses the `TFDataSet` class  load the data from txt files. `TFDataSet` is basically a wrapper of the TensorFlow class `Dataset` with support for distributed training
+
+class MyDataSet(TFDataSet):
+    def __init__(self):
+        super(MyDataSet, self).__init__('my_dataset', 'dataset_filelines_test_*.txt',
+                                        min_queue_examples=2, shuffle_size=5)
+
+    def _map(self, example_serialized):
+        def _parse(line):
+            return np.int32(line), np.int32(line)
+
+        a, b = tf.py_func(_parse, [example_serialized], [tf.int32, tf.int32], stateful=True)
+        return a, b
+
+
+class MyTrainer(Trainer):
+    def __init__(self, dataset):
+        super(MyTrainer, self).__init__('/tmp/logdir', dataset=dataset)
+
+    def create_graph(self, dataset_tensor, batch_size):
+        inputs, outputs = dataset_tensor
+        self.global_step = training_util.get_or_create_global_step()
+        global_step_increase = tf.assign_add(self.global_step, 1)
+        with tf.control_dependencies([global_step_increase]):
+            self.inputs = tf.identity(inputs)
+            self.outputs = tf.identity(outputs)
+
+    def step(self, session, graph_data):
+        step, value_inputs, value_outputs = session.run([self.global_step,
+                                                         self.inputs, self.outputs])
+        print('{}: {}, {}'.format(step, value_inputs.tolist(), value_outputs.tolist()))
+
+
+if __name__ == '__main__':
+    # run the training
+    MyTrainer(dataset=MyDataSet()).run(epochs=1, batch_size=2)
+```
 
 
 ### Distributed training with continuous evaluation
@@ -55,7 +94,7 @@ The recommended way to perform an evaluation at the same time the training is ru
 For example:
 
 ```python
-from distributed_training import launch_train_evaluation
+from distributed_training import *
 from tf_dataset import TFDataSet
 import tensorflow as tf
 from tensorflow.contrib import layers
@@ -63,13 +102,11 @@ from tensorflow.contrib import losses
 from tensorflow.python.training import training_util
 import numpy as np
 
-# dummy dataset
+
 class MyDummyDataSet(TFDataSet):
     def __init__(self):
-        super(MyDummyDataSet, self).__init__(name='my_dataset', 
-                                             data_files_pattern='dataset_filelines_test_*.txt',
-                                             min_queue_examples=2, 
-                                             shuffle_size=5)
+        super(MyDummyDataSet, self).__init__('my_dataset', 'dataset_filelines_test_*.txt',
+                                             min_queue_examples=2, shuffle_size=5)
 
     def _map(self, example_serialized):
         def _parse(line):
@@ -87,13 +124,12 @@ class MyDummyDataSet(TFDataSet):
         input_1 = tf.reshape(input_1, [1])
         input_2 = tf.reshape(input_2, [1])
         output = tf.reshape(output, [1])
-        # concat all the input into one tensor, we could also return 3 values in the 
-        # tuple and make the concat in the graph
+        # we could perform this operation here or in the graph
         input = tf.concat([input_1, input_2], axis=0)
         return input, output
 
-# function that creates the model
-def model_fn_example(dataset_tensor, evaluation):
+
+def model_fn_example(dataset_tensor, evaluation, batch_size):
     input, output = dataset_tensor
     net_output = layers.fully_connected(input, 1, activation_fn=None)
     batch_error = losses.mean_squared_error(output, net_output)
@@ -108,33 +144,40 @@ def model_fn_example(dataset_tensor, evaluation):
         count = tf.Variable(0.0, dtype=tf.float32, name='data_samples', trainable=False)
         count = tf.assign_add(count, 1)
         error = error_sum / count
+        graph_data['error'] = error
     else:
         # use moving averages for the error
         ema = tf.train.ExponentialMovingAverage(decay=0.9)
         update_op = ema.apply([batch_error])
         error = ema.average(batch_error)
+        # add train operator
         sgd = tf.train.GradientDescentOptimizer(0.00001)
         train_op = sgd.minimize(batch_error, global_step)
-        # graph to execute in session.run for the training
         graph_data['error'] = error
         graph_data['update_op'] = update_op
         graph_data['train_op'] = train_op
 
-    # add error to summary, this will show in tensorboard for training and test.
-    # the summary operator will be executed in session.run during evaluation
+    # add error to summary
     tf.summary.scalar('mse_error', error)
     return graph_data
 
+
 if __name__ == '__main__':
-	# use same dataset for training and testing, usually you will have 2 different dataset
-	dataset = MyDummyDataSet()
-	log_dir = '/tmp/logdir'  # /tmp/logdir/eval will contain the evaluation summary 
-	launch_train_evaluation(model_fn=model_fn_example, 
-                            log_dir=log_dir, 
-                            epochs=10, 
-                            train_batch_size=16, 
-                            train_datasest=dataset,
-                            test_dataset=dataset)
+    logdir = '/tmp/tensorport_template_test_logdir'
+    trainer = DistributedTrainer(log_dir=logdir,
+                                 dataset=MyDummyDataSet(),
+                                 model_fn=model_fn_example,
+                                 task_spec=get_task_spec(),
+                                 save_checkpoint_secs=10,
+                                 save_summaries_steps=10,
+                                 log_step_count_steps=10)
+    trainer.run(epochs=20, batch_size=8)
+    evaluator = DistributedEvaluator(log_dir=logdir,
+                                     # using same dataset as training here, only for testing
+                                     dataset=MyDummyDataSet(),
+                                     model_fn=model_fn_example,
+                                     infinite_loop=False)
+    evaluator.run()
 ```
 
 ## Running a job
